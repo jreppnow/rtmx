@@ -1,0 +1,9 @@
+<form hx-post="/login" hx-swap="outerHTML">
+    <label>Name: </label>
+    <input 
+        id="username-input" 
+        name="username"     
+        value="{{ value }}" {% if has_error %} class="has-error" {% endif %}
+        hx-put="/login/validate" hx-target="closest form" hx-trigger="keyup changed delay:500ms">
+    <button type="submit">Login</button>
+</form>
