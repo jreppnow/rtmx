@@ -32,6 +32,7 @@ struct Root {
 struct LoginPage {
     value: String,
     has_error: bool,
+    from_validation: bool,
 }
 
 impl Default for LoginPage {
@@ -39,6 +40,7 @@ impl Default for LoginPage {
         Self {
             value: String::new(),
             has_error: true,
+            from_validation: false,
         }
     }
 }
@@ -84,6 +86,7 @@ pub async fn try_login(
         LoginPage {
             value: username,
             has_error: true,
+            from_validation: true,
         }
         .to_string(),
     ))
@@ -96,6 +99,7 @@ pub async fn validate_username(
         LoginPage {
             has_error: Username::new(&username).is_none(),
             value: username,
+            from_validation: true,
         }
         .to_string(),
     )

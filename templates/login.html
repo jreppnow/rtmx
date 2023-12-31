@@ -1,9 +1,19 @@
-<form hx-post="/login" hx-swap="outerHTML">
-    <label>Name: </label>
+<form id="login-form" hx-post="/login" hx-swap="outerHTML">
+    <label>Join as</label>
+    <hr>
     <input 
         id="username-input" 
         name="username"     
-        value="{{ value }}" {% if has_error %} class="has-error" {% endif %}
-        hx-put="/login/validate" hx-target="closest form" hx-trigger="keyup changed delay:500ms">
-    <button type="submit">Login</button>
+        value="{{ value }}" 
+        {% if has_error %} 
+            class="has-error" 
+        {% endif %}
+        hx-put="/login/validate" hx-target="closest form" hx-trigger="keyup changed delay:500ms{% if !from_validation %},load{% endif %}">
+    <button 
+        type="submit" 
+        {% if has_error %} 
+             disabled
+        {% endif %}>
+        Login
+    </button>
 </form>
