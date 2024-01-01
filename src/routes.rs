@@ -48,12 +48,12 @@ impl Default for LoginPage {
 #[derive(Template, Default)]
 #[template(path = "messages.html")]
 struct MessagesPage {
-    conversations: Vec<Conversation>,
-    selected: Option<()>,
+    conversations: Vec<ConversationPreview>,
+    selected: Option<ConversationView>,
 }
 
 #[derive(Debug, Clone)]
-struct Conversation {
+struct ConversationPreview {
     name: String,
     date: String,
     preview: String,
@@ -168,7 +168,7 @@ impl<A: Send + Sync> FromRequestParts<A> for HtmxRequest {
     {
         Box::pin(async {
             let headers = HeaderMap::from_request_parts(parts, state).await.unwrap();
-            if headers
+            if !headers
                 .get("HX-Request")
                 .is_some_and(|value| value.as_bytes() == "true".as_bytes())
             {
@@ -190,7 +190,7 @@ impl<A: Send + Sync> FromRequestParts<A> for HtmxRequest {
 pub async fn messages(username: Username) -> Root {
     Root {
         content: Content::Messages(MessagesPage {
-            conversations: array::from_fn::<_, 10, _>(|index| Conversation {
+            conversations: array::from_fn::<_, 10, _>(|index| ConversationPreview {
                 name: format!("Message #{index}"),
                 date: format!("{index} seconds ago.."),
                 preview: "Very important cont...".to_owned(),
@@ -206,20 +206,52 @@ pub struct GetMessage {
     message: String,
 }
 
+#[derive(Template, Default)]
+#[template(path = "message.html")]
+pub struct ConversationView {
+    messages: Vec<Message>,
+}
+
+#[derive(Debug, Clone)]
+struct Message {
+    sender: String,
+    id: u64,
+    content: String,
+    date: String,
+}
+
 pub async fn message(
     htmx: Option<HtmxRequest>,
     Path(GetMessage { message }): Path<GetMessage>,
     username: Username,
-) -> Root {
-    Root {
-        content: Content::Messages(MessagesPage {
-            conversations: array::from_fn::<_, 10, _>(|index| Conversation {
-                name: format!("Message #{index}"),
-                date: format!("{index} seconds ago.."),
-                preview: "Very important cont...".to_owned(),
-            })
-            .to_vec(),
-            selected: None,
-        }),
+) -> Either<Root, ConversationView> {
+    let mut conversation = ConversationView {
+        messages: array::from_fn::<_, 20, _>(|index| Message {
+            sender: if index % 2 == 0 { "You" } else { "Them" }.to_owned(),
+            id: index as u64,
+            content: if index % 2 == 0 { "Ping!" } else { "Pong!" }.to_owned(),
+            date: format!("{index} seconds ago.."),
+        })
+        .to_vec(),
+    };
+
+    dbg!(&htmx);
+
+    // want the newest message to be the lowest one
+    conversation.messages.reverse();
+    if let None | Some(HtmxRequest { restore: true, .. }) = htmx {
+        Either::E1(Root {
+            content: Content::Messages(MessagesPage {
+                conversations: array::from_fn::<_, 10, _>(|index| ConversationPreview {
+                    name: format!("Message #{index}"),
+                    date: format!("{index} seconds ago.."),
+                    preview: "Very important cont...".to_owned(),
+                })
+                .to_vec(),
+                selected: Some(conversation),
+            }),
+        })
+    } else {
+        Either::E2(conversation)
     }
 }

@@ -17,6 +17,7 @@ async fn main() {
         .route("/login", post(routes::try_login))
         .route("/login/validate", put(routes::validate_username))
         .route("/messages", get(routes::messages))
+        .route("/messages/:message", get(routes::message))
         .route("/", get(|| async { Redirect::permanent("/messages") }))
         .fallback(|| async { (StatusCode::NOT_FOUND, "Not a valid url on this server!") });
 

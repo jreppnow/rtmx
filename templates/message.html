@@ -1,0 +1,13 @@
+<ul id="message-history">
+    {% for message in messages -%}
+        <li class="individual message" id="message-{{ message.id }}">
+            <span class="message-sender">{{ message.sender }}</span>
+            <p class="message-content" >{{ message.content }}</p>
+            <span class="message-date">{{ message.date }}</span>
+        </li>
+    {% endfor %}
+</ul>
+<form id="new-message-form">
+    <input type="text" name="new-message-content" id="new-message-content" />
+    <button type="submit">Send</button>
+</form>
