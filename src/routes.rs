@@ -1,7 +1,12 @@
-use std::{borrow::Cow, future::Future};
+use std::{array, borrow::Cow, future::Future};
 
 use askama::Template;
-use axum::{extract::FromRequestParts, http::request::Parts, response::Redirect, Form};
+use axum::{
+    extract::{FromRequestParts, Path},
+    http::{request::Parts, HeaderMap, HeaderValue, StatusCode},
+    response::Redirect,
+    Form,
+};
 use axum_extra::{
     either::Either,
     extract::{
@@ -134,8 +139,79 @@ impl<A: Send + Sync> FromRequestParts<A> for Username {
     }
 }
 
+#[derive(Debug, Clone)]
+pub struct HtmxRequest {
+    restore: bool,
+}
+
+impl<A: Send + Sync> FromRequestParts<A> for HtmxRequest {
+    type Rejection = (StatusCode, &'static str);
+
+    fn from_request_parts<'life0, 'life1, 'async_trait>(
+        parts: &'life0 mut Parts,
+        state: &'life1 A,
+    ) -> ::core::pin::Pin<
+        Box<dyn Future<Output = Result<Self, Self::Rejection>> + Send + 'async_trait>,
+    >
+    where
+        'life0: 'async_trait,
+        'life1: 'async_trait,
+        Self: 'async_trait,
+    {
+        Box::pin(async {
+            let headers = HeaderMap::from_request_parts(parts, state).await.unwrap();
+            if headers
+                .get("HX-Request")
+                .is_some_and(|value| value.as_bytes() == "true".as_bytes())
+            {
+                return Err((
+                    StatusCode::BAD_REQUEST,
+                    "Expected HTMX request for this endpoint!",
+                ));
+            };
+
+            return Ok(Self {
+                restore: headers
+                    .get("HX-History-Restore-Request")
+                    .is_some_and(|value| value.as_bytes() == "true".as_bytes()),
+            });
+        })
+    }
+}
+
 pub async fn messages(username: Username) -> Root {
     Root {
-        content: Content::Messages(Default::default()),
+        content: Content::Messages(MessagesPage {
+            conversations: array::from_fn::<_, 10, _>(|index| Conversation {
+                name: format!("Message #{index}"),
+                date: format!("{index} seconds ago.."),
+                preview: "Very important cont...".to_owned(),
+            })
+            .to_vec(),
+            selected: None,
+        }),
+    }
+}
+
+#[derive(Debug, Clone, Deserialize)]
+pub struct GetMessage {
+    message: String,
+}
+
+pub async fn message(
+    htmx: Option<HtmxRequest>,
+    Path(GetMessage { message }): Path<GetMessage>,
+    username: Username,
+) -> Root {
+    Root {
+        content: Content::Messages(MessagesPage {
+            conversations: array::from_fn::<_, 10, _>(|index| Conversation {
+                name: format!("Message #{index}"),
+                date: format!("{index} seconds ago.."),
+                preview: "Very important cont...".to_owned(),
+            })
+            .to_vec(),
+            selected: None,
+        }),
     }
 }
