@@ -1,0 +1,12 @@
+<div id="messages-container">
+    <aside id="conversations-list">
+
+    </aside>
+    <main id="conversation-content">
+        {% match selected -%}
+            {% when Some with (message) -%}
+            {% when None -%}
+                <p id="no-messages">Select a conversation to see the messages!</p>
+        {% endmatch %}
+    </main>
+</div>

@@ -11,7 +11,8 @@
     {% match content -%}
         {% when Content::Login with (login) -%}
             {{ login|safe }}
-        {% when Content::Messages %}
+        {% when Content::Messages with (messages) %}
+            {{ messages|safe }}
     {% endmatch %}
 </body>
 

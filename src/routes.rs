@@ -1,12 +1,7 @@
 use std::{borrow::Cow, future::Future};
 
 use askama::Template;
-use axum::{
-    extract::FromRequestParts,
-    http::request::Parts,
-    response::{Html, Redirect},
-    Form,
-};
+use axum::{extract::FromRequestParts, http::request::Parts, response::Redirect, Form};
 use axum_extra::{
     either::Either,
     extract::{
@@ -18,18 +13,18 @@ use serde::Deserialize;
 
 enum Content {
     Login(LoginPage),
-    Messages,
+    Messages(MessagesPage),
 }
 
 #[derive(Template)]
 #[template(path = "index.html")]
-struct Root {
+pub struct Root {
     content: Content,
 }
 
 #[derive(Template)]
 #[template(path = "login.html")]
-struct LoginPage {
+pub struct LoginPage {
     value: String,
     has_error: bool,
     from_validation: bool,
@@ -53,17 +48,14 @@ struct MessagesPage {
 
 const USER_NAME_COOKIE: &str = "MSGX_USERNAME";
 
-pub async fn login(username: Option<Username>) -> Either<Html<String>, Redirect> {
+pub async fn login(username: Option<Username>) -> Either<Root, Redirect> {
     if username.is_some() {
         return Either::E2(Redirect::to("/messages"));
     };
 
-    Either::E1(Html(
-        Root {
-            content: Content::Login(Default::default()),
-        }
-        .to_string(),
-    ))
+    Either::E1(Root {
+        content: Content::Login(Default::default()),
+    })
 }
 
 #[derive(Deserialize)]
@@ -74,7 +66,7 @@ pub struct LoginParameters {
 pub async fn try_login(
     cookies: CookieJar,
     Form(LoginParameters { username }): Form<LoginParameters>,
-) -> Either<Html<String>, (CookieJar, Redirect)> {
+) -> Either<LoginPage, (CookieJar, Redirect)> {
     if Username::new(&username).is_some() {
         let mut cookie = Cookie::new(USER_NAME_COOKIE, username);
         cookie.set_http_only(true);
@@ -82,27 +74,21 @@ pub async fn try_login(
         return Either::E2((cookies.add(cookie), Redirect::to("/messages")));
     };
 
-    Either::E1(Html(
-        LoginPage {
-            value: username,
-            has_error: true,
-            from_validation: true,
-        }
-        .to_string(),
-    ))
+    Either::E1(LoginPage {
+        value: username,
+        has_error: true,
+        from_validation: true,
+    })
 }
 
 pub async fn validate_username(
     Form(LoginParameters { username }): Form<LoginParameters>,
-) -> Html<String> {
-    Html(
-        LoginPage {
-            has_error: Username::new(&username).is_none(),
-            value: username,
-            from_validation: true,
-        }
-        .to_string(),
-    )
+) -> LoginPage {
+    LoginPage {
+        has_error: Username::new(&username).is_none(),
+        value: username,
+        from_validation: true,
+    }
 }
 
 pub struct Username(String);
@@ -148,11 +134,8 @@ impl<A: Send + Sync> FromRequestParts<A> for Username {
     }
 }
 
-pub async fn messages(username: Username) -> Html<String> {
-    Html(
-        Root {
-            content: Content::Messages,
-        }
-        .to_string(),
-    )
+pub async fn messages(username: Username) -> Root {
+    Root {
+        content: Content::Messages(Default::default()),
+    }
 }
