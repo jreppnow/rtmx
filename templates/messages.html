@@ -1,5 +1,18 @@
 <div id="messages-container">
     <aside id="conversations-list">
+        <ul>
+            {% for conversation in conversations -%}
+                <li>
+                    <header> 
+                        <span class="conversation-name">{{ conversation.name }}</span>
+                        <span class="conversation-date">{{ conversation.date }}</span>
+                    </header>
+                    <span class="message-preview">
+                        {{ conversation.preview }}
+                    </span>
+                </li>
+            {% endfor %}
+        </ul>
 
     </aside>
     <main id="conversation-content">

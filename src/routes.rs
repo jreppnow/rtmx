@@ -48,7 +48,15 @@ impl Default for LoginPage {
 #[derive(Template, Default)]
 #[template(path = "messages.html")]
 struct MessagesPage {
+    conversations: Vec<Conversation>,
     selected: Option<()>,
+}
+
+#[derive(Debug, Clone)]
+struct Conversation {
+    name: String,
+    date: String,
+    preview: String,
 }
 
 const USER_NAME_COOKIE: &str = "MSGX_USERNAME";
