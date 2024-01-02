@@ -190,7 +190,7 @@ impl<A: Send + Sync> FromRequestParts<A> for HtmxRequest {
 pub async fn messages(username: Username) -> Root {
     Root {
         content: Content::Messages(MessagesPage {
-            conversations: array::from_fn::<_, 10, _>(|index| ConversationPreview {
+            conversations: array::from_fn::<_, 30, _>(|index| ConversationPreview {
                 name: format!("Message #{index}"),
                 date: format!("{index} seconds ago.."),
                 preview: "Very important cont...".to_owned(),
@@ -214,7 +214,7 @@ pub struct ConversationView {
 
 #[derive(Debug, Clone)]
 struct Message {
-    sender: String,
+    yours: bool,
     id: u64,
     content: String,
     date: String,
@@ -226,8 +226,8 @@ pub async fn message(
     username: Username,
 ) -> Either<Root, ConversationView> {
     let mut conversation = ConversationView {
-        messages: array::from_fn::<_, 20, _>(|index| Message {
-            sender: if index % 2 == 0 { "You" } else { "Them" }.to_owned(),
+        messages: array::from_fn::<_, 40, _>(|index| Message {
+            yours: index % 2 == 0,
             id: index as u64,
             content: if index % 2 == 0 { "Ping!" } else { "Pong!" }.to_owned(),
             date: format!("{index} seconds ago.."),
@@ -238,11 +238,11 @@ pub async fn message(
     dbg!(&htmx);
 
     // want the newest message to be the lowest one
-    conversation.messages.reverse();
+    // conversation.messages.reverse();
     if let None | Some(HtmxRequest { restore: true, .. }) = htmx {
         Either::E1(Root {
             content: Content::Messages(MessagesPage {
-                conversations: array::from_fn::<_, 10, _>(|index| ConversationPreview {
+                conversations: array::from_fn::<_, 40, _>(|index| ConversationPreview {
                     name: format!("Message #{index}"),
                     date: format!("{index} seconds ago.."),
                     preview: "Very important cont...".to_owned(),

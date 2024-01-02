@@ -20,7 +20,9 @@
             {% when Some with (message) -%}
                 {{ message|safe }}
             {% when None -%}
-                <p id="no-messages">Select a conversation to see the messages!</p>
+                <div id="no-messages-container">
+                    <p id="no-messages">Select a conversation to see the messages!</p>
+                </div>
         {% endmatch %}
     </main>
 </div>

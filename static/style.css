@@ -7,6 +7,7 @@
     margin: 0;
     padding: 0;
     font-family: Roboto;
+    box-sizing: border-box;
 }
 
 body {
@@ -65,3 +66,121 @@ body {
     background-color: gray;
 }
 
+#messages-container {
+    max-width: 1440px;
+    flex-grow: 1;
+    height: 100%;
+    display: flex;
+    flex-direction: row;
+    border: 2px solid grey;
+
+    & #conversations-list {
+        width: 360px;
+        background-color: lightgrey;
+        height: 100%;
+        overflow: scroll;
+        
+        & li {
+            list-style-type: none;
+            border: 2px solid;
+            padding: 2px;
+
+            & header {
+                display: flex;
+                flex-direction: row;
+                justify-content: space-between;
+                align-items: start;
+
+                & .conversation-name {
+                    font-size: 1.5rem;
+                }
+            }
+        }
+
+        & :nth-child(n + 2 of li) {
+            margin-top: -2px;
+        }
+
+        & li:hover {
+            background-color: red;
+            cursor: pointer;
+        }
+    }
+
+    & #conversation-content {
+        flex-grow: 1;
+
+        & #no-messages-container {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            height: 100%;
+            width: 100%;
+        }
+
+        & #conversation-details {
+            display: flex;
+            flex-direction: column;
+            justify-content: end;
+            height: 100%;
+            width: 100%;
+            gap: .5rem;
+
+            & #new-message-form {
+                height: 3rem;
+                width: 100%;
+                display: flex;
+                align-items: center;
+                justify-content: end;
+                gap: 4px;
+                margin-bottom: .5rem;
+
+                & button {
+                    width: 64px;
+                    height: 2rem;
+                    margin-right: 4px;
+                }
+
+                & input {
+                    flex-grow: 1;
+                    font-size: 2rem;
+                    margin-left: 4px;
+                    padding: .2rem;
+                }
+            }
+
+            & #message-history {
+                display: flex;
+                flex-direction: column-reverse;
+                justify-content: end;
+                overflow: scroll;
+
+                & li {
+                    list-style-type: none;
+                    border: gray 2px;
+                    border-radius: 4px;
+                    max-width: 90%;
+                    padding: .5rem;
+
+                    &.yours {
+                        align-self: flex-end;
+                        background-color: lightgreen;
+                        margin-right: .5rem;
+                    }
+
+                    &.theirs {
+                        align-self: flex-start;
+                        background-color: gray;
+                        margin-left: .5rem;
+                    }
+
+                    & .message-date {
+                        font-size: .8rem;
+                    }
+                }
+
+            } 
+        }
+
+    }
+}
