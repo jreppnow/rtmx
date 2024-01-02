@@ -66,6 +66,10 @@ body {
     background-color: gray;
 }
 
+:root {
+    --conversation-list-width: 360px;
+}
+
 #messages-container {
     max-width: 1440px;
     flex-grow: 1;
@@ -75,7 +79,7 @@ body {
     border: 2px solid grey;
 
     & #conversations-list {
-        width: 360px;
+        width: var(--conversation-list-width);
         background-color: lightgrey;
         height: 100%;
         overflow: scroll;
@@ -109,6 +113,7 @@ body {
 
     & #conversation-content {
         flex-grow: 1;
+        max-width: calc(100% - var(--conversation-list-width));
 
         & #no-messages-container {
             display: flex;
@@ -154,13 +159,19 @@ body {
                 flex-direction: column-reverse;
                 justify-content: end;
                 overflow: scroll;
+                gap: .5rem;
 
                 & li {
                     list-style-type: none;
                     border: gray 2px;
                     border-radius: 4px;
-                    max-width: 90%;
+                    max-width: 60%;
                     padding: .5rem;
+
+                    & .message-content {
+                        overflow-wrap: break-word;
+                        max-width: 100%;
+                    }
 
                     &.yours {
                         align-self: flex-end;
