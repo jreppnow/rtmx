@@ -11,6 +11,8 @@ askama_axum = "0.4.0"
 axum = "0.7.2"
 axum-extra = { version = "0.9.1", features = ["cookie"] }
 axum-macros = "0.4.0"
+chrono = { version = "0.4.31", features = ["serde"] }
 serde = { version = "1.0.193", features = ["derive"] }
 tokio = { version = "1.35.1", features = ["full"] }
 tower-http = { version = "0.5.0", features = ["fs"] }
+urlencoding = "2.1.3"

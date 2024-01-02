@@ -1,8 +1,8 @@
-use std::{array, borrow::Cow, future::Future};
+use std::{borrow::Cow, future::Future};
 
 use askama::Template;
 use axum::{
-    extract::{FromRequestParts, Path},
+    extract::{FromRequestParts, Path, Query},
     http::{request::Parts, HeaderMap, StatusCode},
     response::Redirect,
     Form,
@@ -14,6 +14,7 @@ use axum_extra::{
         CookieJar,
     },
 };
+use chrono::{DateTime, Utc};
 use serde::Deserialize;
 
 enum Content {
@@ -190,12 +191,13 @@ impl<A: Send + Sync> FromRequestParts<A> for HtmxRequest {
 pub async fn get_conversations(_username: Username) -> Root {
     Root {
         content: Content::Messages(MessagesPage {
-            conversations: array::from_fn::<_, 30, _>(|index| ConversationPreview {
-                peer: format!("user{index:04}"),
-                date: format!("{index} seconds ago.."),
-                preview: "Very important cont...".to_owned(),
-            })
-            .to_vec(),
+            conversations: (0..30)
+                .map(|index| ConversationPreview {
+                    peer: format!("user{index:04}"),
+                    date: format!("{index} seconds ago.."),
+                    preview: "Very important cont...".to_owned(),
+                })
+                .collect(),
             selected: None,
         }),
     }
@@ -207,10 +209,17 @@ pub struct GetConversation {
 }
 
 #[derive(Template, Default)]
+#[template(path = "auto-refresh-messages.html")]
+pub struct AutoRefreshMessages {
+    messages: Vec<Message>,
+    timestamp: DateTime<Utc>,
+    peer: String,
+}
+
+#[derive(Template, Default)]
 #[template(path = "conversation.html")]
 pub struct ConversationView {
-    messages: Vec<Message>,
-    peer: String,
+    messages: AutoRefreshMessages,
 }
 
 #[derive(Template, Debug, Clone)]
@@ -225,32 +234,35 @@ pub struct Message {
 pub async fn get_conversation(
     htmx: Option<HtmxRequest>,
     Path(GetConversation { peer }): Path<GetConversation>,
-    username: Username,
+    _username: Username,
 ) -> Either<Root, ConversationView> {
     let conversation = ConversationView {
-        peer,
-        messages: array::from_fn::<_, 40, _>(|index| Message {
-            yours: index % 2 == 0,
-            id: index as u64,
-            content: if index % 2 == 0 { "Ping!" } else { "Pong!" }.to_owned(),
-            date: format!("{index} seconds ago.."),
-        })
-        .to_vec(),
+        messages: AutoRefreshMessages {
+            peer,
+            messages: (0..40)
+                .map(|index| Message {
+                    yours: index % 2 == 0,
+                    id: index as u64,
+                    content: if index % 2 == 0 { "Ping!" } else { "Pong!" }.to_owned(),
+                    date: format!("{index} seconds ago.."),
+                })
+                .collect(),
+            timestamp: Utc::now(),
+        },
     };
 
     dbg!(&htmx);
 
-    // want the newest message to be the lowest one
-    // conversation.messages.reverse();
     if let None | Some(HtmxRequest { restore: true, .. }) = htmx {
         Either::E1(Root {
             content: Content::Messages(MessagesPage {
-                conversations: array::from_fn::<_, 40, _>(|index| ConversationPreview {
-                    peer: format!("user{index:04}"),
-                    date: format!("{index} seconds ago.."),
-                    preview: "Very important cont...".to_owned(),
-                })
-                .to_vec(),
+                conversations: (0..40)
+                    .map(|index| ConversationPreview {
+                        peer: format!("user{index:04}"),
+                        date: format!("{index} seconds ago.."),
+                        preview: "Very important cont...".to_owned(),
+                    })
+                    .collect(),
                 selected: Some(conversation),
             }),
         })
@@ -271,18 +283,61 @@ pub struct SendMessageForm {
 }
 
 pub async fn send_message(
-    Path(SendMessagePath { .. }): Path<SendMessagePath>,
+    Path(SendMessagePath { peer }): Path<SendMessagePath>,
     _username: Username,
     Form(SendMessageForm {
         new_message_content,
     }): Form<SendMessageForm>,
-) -> Message {
-    // TODO: DB and such..
+) -> AutoRefreshMessages {
+    // TODO: check for new messages also DB and such..
 
-    Message {
-        yours: true,
-        id: 1337,
-        content: new_message_content,
-        date: "just now".to_owned(),
+    AutoRefreshMessages {
+        messages: vec![Message {
+            yours: true,
+            id: 1337,
+            content: new_message_content,
+            date: format!("{}", Utc::now().format("%H:%M")),
+        }],
+        timestamp: Utc::now(),
+        peer,
     }
+}
+
+#[derive(Debug, Clone, Deserialize)]
+pub struct GetNewMessagesPath {
+    peer: String,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+pub struct GetNewMessagesQuery {
+    timestamp: String,
+}
+
+pub async fn get_new_messages(
+    Path(GetNewMessagesPath { peer }): Path<GetNewMessagesPath>,
+    Query(GetNewMessagesQuery { timestamp }): Query<GetNewMessagesQuery>,
+    username: Username,
+) -> Result<AutoRefreshMessages, StatusCode> {
+    let timestamp = urlencoding::decode(&timestamp).map_err(|_| StatusCode::BAD_REQUEST)?;
+    let timestamp: DateTime<Utc> = timestamp.parse().map_err(|_| StatusCode::BAD_REQUEST)?;
+    fn changes_since(_username: &str, _peer: &str, _timestamp: DateTime<Utc>) -> Vec<Message> {
+        // TODO: check if there are any new messages in this conversation in the DB and such..
+        vec![Message {
+            yours: false,
+            id: 123123213,
+            content: "Are you there?".to_owned(),
+            date: format!("{}", Utc::now().format("%H:%M")),
+        }]
+    }
+    let updates = changes_since(&username.0, &peer, timestamp);
+
+    if updates.is_empty() {
+        return Err(StatusCode::NO_CONTENT);
+    };
+
+    Ok(AutoRefreshMessages {
+        messages: updates,
+        timestamp: Utc::now(),
+        peer,
+    })
 }

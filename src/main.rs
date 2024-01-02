@@ -19,6 +19,7 @@ async fn main() {
         .route("/conversations", get(routes::get_conversations))
         .route("/conversations/:peer", get(routes::get_conversation))
         .route("/conversations/:peer", post(routes::send_message))
+        .route("/conversations/:peer/poll", get(routes::get_new_messages))
         .route("/", get(|| async { Redirect::permanent("/conversations") }))
         .fallback(|| async { (StatusCode::NOT_FOUND, "Not a valid url on this server!") });
 

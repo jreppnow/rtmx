@@ -1,10 +1,8 @@
 <div id="conversation-details">
     <ul id="message-history">
-        {% for message in messages -%}
-            {{ message|safe }}
-        {% endfor %}
+        {{ messages|safe }}
     </ul>
-    <form id="new-message-form" hx-post="/conversations/{{ peer }}" hx-target="#message-history" hx-swap="afterbegin">
+    <form id="new-message-form" hx-post="/conversations/{{ messages.peer }}" hx-target="#hidden-refresh" hx-swap="outerHTML">
         <input type="text" name="new-message-content" id="new-message-content" />
         <button type="submit">Send</button>
     </form>  

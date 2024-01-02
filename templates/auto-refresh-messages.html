@@ -1,0 +1,6 @@
+<li style="display: none;" id="hidden-refresh">
+    <input type="hidden" name="timestamp" hx-get="/conversations/{{ peer }}/poll" value="{{ timestamp|urlencode }}" hx-target="closest li" hx-swap="outerHTML" hx-trigger="every 10s"/>
+</li>
+{% for message in messages -%}
+    {{ message|safe }}
+{% endfor %}
