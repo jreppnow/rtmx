@@ -3,7 +3,7 @@ use std::{array, borrow::Cow, future::Future};
 use askama::Template;
 use axum::{
     extract::{FromRequestParts, Path},
-    http::{request::Parts, HeaderMap, HeaderValue, StatusCode},
+    http::{request::Parts, HeaderMap, StatusCode},
     response::Redirect,
     Form,
 };
@@ -54,7 +54,7 @@ struct MessagesPage {
 
 #[derive(Debug, Clone)]
 struct ConversationPreview {
-    name: String,
+    peer: String,
     date: String,
     preview: String,
 }
@@ -187,11 +187,11 @@ impl<A: Send + Sync> FromRequestParts<A> for HtmxRequest {
     }
 }
 
-pub async fn messages(username: Username) -> Root {
+pub async fn get_conversations(_username: Username) -> Root {
     Root {
         content: Content::Messages(MessagesPage {
             conversations: array::from_fn::<_, 30, _>(|index| ConversationPreview {
-                name: format!("Message #{index}"),
+                peer: format!("user{index:04}"),
                 date: format!("{index} seconds ago.."),
                 preview: "Very important cont...".to_owned(),
             })
@@ -202,30 +202,33 @@ pub async fn messages(username: Username) -> Root {
 }
 
 #[derive(Debug, Clone, Deserialize)]
-pub struct GetMessage {
-    message: String,
+pub struct GetConversation {
+    peer: String,
 }
 
 #[derive(Template, Default)]
-#[template(path = "message.html")]
+#[template(path = "conversation.html")]
 pub struct ConversationView {
     messages: Vec<Message>,
+    peer: String,
 }
 
-#[derive(Debug, Clone)]
-struct Message {
+#[derive(Template, Debug, Clone)]
+#[template(path = "message.html")]
+pub struct Message {
     yours: bool,
     id: u64,
     content: String,
     date: String,
 }
 
-pub async fn message(
+pub async fn get_conversation(
     htmx: Option<HtmxRequest>,
-    Path(GetMessage { message }): Path<GetMessage>,
+    Path(GetConversation { peer }): Path<GetConversation>,
     username: Username,
 ) -> Either<Root, ConversationView> {
-    let mut conversation = ConversationView {
+    let conversation = ConversationView {
+        peer,
         messages: array::from_fn::<_, 40, _>(|index| Message {
             yours: index % 2 == 0,
             id: index as u64,
@@ -243,7 +246,7 @@ pub async fn message(
         Either::E1(Root {
             content: Content::Messages(MessagesPage {
                 conversations: array::from_fn::<_, 40, _>(|index| ConversationPreview {
-                    name: format!("Message #{index}"),
+                    peer: format!("user{index:04}"),
                     date: format!("{index} seconds ago.."),
                     preview: "Very important cont...".to_owned(),
                 })
@@ -253,5 +256,33 @@ pub async fn message(
         })
     } else {
         Either::E2(conversation)
+    }
+}
+
+#[derive(Debug, Clone, Deserialize)]
+pub struct SendMessagePath {
+    peer: String,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+pub struct SendMessageForm {
+    #[serde(rename = "new-message-content")]
+    new_message_content: String,
+}
+
+pub async fn send_message(
+    Path(SendMessagePath { .. }): Path<SendMessagePath>,
+    _username: Username,
+    Form(SendMessageForm {
+        new_message_content,
+    }): Form<SendMessageForm>,
+) -> Message {
+    // TODO: DB and such..
+
+    Message {
+        yours: true,
+        id: 1337,
+        content: new_message_content,
+        date: "just now".to_owned(),
     }
 }

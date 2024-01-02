@@ -1,14 +1,4 @@
-<div id="conversation-details">
-    <ul id="message-history">
-        {% for message in messages -%}
-            <li class="individual-message {% if message.yours %} yours {% else %} theirs {% endif %}" id="message-{{ message.id }}">
-                <p class="message-content" >{{ message.content }}</p>
-                <span class="message-date">{{ message.date }}</span>
-            </li>
-        {% endfor %}
-    </ul>
-    <form id="new-message-form">
-        <input type="text" name="new-message-content" id="new-message-content" />
-        <button type="submit">Send</button>
-    </form>  
-</div>
+<li class="individual-message {% if yours %} yours {% else %} theirs {% endif %}" id="message-{{ id }}">
+    <p class="message-content" >{{ content }}</p>
+    <span class="message-date">{{ date }}</span>
+</li>

@@ -16,9 +16,10 @@ async fn main() {
         .route("/login", get(routes::login))
         .route("/login", post(routes::try_login))
         .route("/login/validate", put(routes::validate_username))
-        .route("/messages", get(routes::messages))
-        .route("/messages/:message", get(routes::message))
-        .route("/", get(|| async { Redirect::permanent("/messages") }))
+        .route("/conversations", get(routes::get_conversations))
+        .route("/conversations/:peer", get(routes::get_conversation))
+        .route("/conversations/:peer", post(routes::send_message))
+        .route("/", get(|| async { Redirect::permanent("/conversations") }))
         .fallback(|| async { (StatusCode::NOT_FOUND, "Not a valid url on this server!") });
 
     let listener = TcpListener::bind("[::]:3000").await.unwrap();

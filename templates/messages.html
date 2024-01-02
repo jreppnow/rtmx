@@ -2,9 +2,9 @@
     <aside id="conversations-list">
         <ul>
             {% for conversation in conversations -%}
-                <li hx-get="/messages/some-message" hx-target="#conversation-content" hx-push-url="true">
+                <li hx-get="/conversations/{{ conversation.peer }}" hx-target="#conversation-content" hx-push-url="true">
                     <header> 
-                        <span class="conversation-name">{{ conversation.name }}</span>
+                        <span class="conversation-name">{{ conversation.peer }}</span>
                         <span class="conversation-date">{{ conversation.date }}</span>
                     </header>
                     <span class="message-preview">
