@@ -7,6 +7,7 @@ use axum::{
 use tokio::{self, net::TcpListener};
 use tower_http::services::ServeDir;
 
+mod model;
 mod routes;
 
 #[tokio::main]
