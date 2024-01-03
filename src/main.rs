@@ -1,30 +1,24 @@
-use axum::{
-    http::StatusCode,
-    response::Redirect,
-    routing::{get, post, put},
-    Router,
-};
-use tokio::{self, net::TcpListener};
-use tower_http::services::ServeDir;
+use std::{env::var, error::Error};
 
+use diesel_async::pooled_connection::{deadpool::Pool, AsyncDieselConnectionManager};
+use tokio::{self, net::TcpListener};
+
+mod api;
 mod model;
-mod routes;
 
 #[tokio::main]
-async fn main() {
-    let app = Router::new()
-        .nest_service("/static", ServeDir::new("static/"))
-        .route("/login", get(routes::login))
-        .route("/login", post(routes::try_login))
-        .route("/login/validate", put(routes::validate_username))
-        .route("/conversations", get(routes::get_conversations))
-        .route("/conversations/:peer", get(routes::get_conversation))
-        .route("/conversations/:peer", post(routes::send_message))
-        .route("/conversations/:peer/poll", get(routes::get_new_messages))
-        .route("/", get(|| async { Redirect::permanent("/conversations") }))
-        .fallback(|| async { (StatusCode::NOT_FOUND, "Not a valid url on this server!") });
+async fn main() -> Result<(), Box<dyn Error + 'static>> {
+    dotenv::dotenv()?;
+
+    let config = AsyncDieselConnectionManager::<diesel_async::AsyncMysqlConnection>::new(var(
+        "DATABASE_URL",
+    )?);
+
+    let app = api::router().with_state(api::Application {
+        db: Pool::builder(config).build()?,
+    });
 
     let listener = TcpListener::bind("[::]:3000").await.unwrap();
 
-    axum::serve(listener, app).await.unwrap()
+    axum::serve(listener, app).await.map_err(Into::into)
 }

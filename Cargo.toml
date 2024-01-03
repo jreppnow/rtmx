@@ -13,7 +13,7 @@ axum-extra = { version = "0.9.1", features = ["cookie"] }
 axum-macros = "0.4.0"
 chrono = { version = "0.4.31", features = ["serde"] }
 diesel = { version = "2.1.4", features = ["mysql"] }
-diesel-async = { version = "0.4.1", features = ["mysql"] }
+diesel-async = { version = "0.4.1", features = ["mysql", "deadpool"] }
 dotenv = "0.15.0"
 serde = { version = "1.0.193", features = ["derive"] }
 tokio = { version = "1.35.1", features = ["full"] }
