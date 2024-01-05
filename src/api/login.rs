@@ -69,7 +69,7 @@ pub async fn try_login(
         let mut cookie = Cookie::new(USER_NAME_COOKIE, username);
         cookie.set_http_only(true);
         cookie.set_same_site(SameSite::Lax);
-        return Either::E2((cookies.add(cookie), Redirect::to("/converations")));
+        return Either::E2((cookies.add(cookie), Redirect::to("/conversations")));
     };
 
     Either::E1(LoginPage {
@@ -99,6 +99,10 @@ impl Username {
         }
         // TODO: validation!
         Some(Self(s.into_owned()))
+    }
+
+    pub fn as_str(&self) -> &str {
+        &self.0
     }
 }
 

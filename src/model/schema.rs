@@ -2,7 +2,7 @@
 
 diesel::table! {
     messages (id) {
-        id -> Unsigned<Integer>,
+        id -> Unsigned<Bigint>,
         #[max_length = 64]
         sender -> Varchar,
         #[max_length = 64]

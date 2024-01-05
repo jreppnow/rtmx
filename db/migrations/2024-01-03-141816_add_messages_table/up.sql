@@ -1,5 +1,5 @@
 CREATE TABLE messages (
-    id INT UNSIGNED NOT NULL AUTO_INCREMENT, 
+    id SERIAL, 
     sender VARCHAR(64) NOT NULL, 
     receiver VARCHAR(64) NOT NULL, 
     content VARCHAR(1024) NOT NULL,

@@ -1,6 +1,6 @@
-mod schema;
+pub mod schema;
 
-use chrono::{DateTime, Utc};
+use chrono::NaiveDateTime;
 use diesel::prelude::*;
 
 #[derive(Insertable)]
@@ -12,7 +12,7 @@ pub struct NewMessage {
     pub content: String,
 }
 
-#[derive(Queryable)]
+#[derive(Queryable, Selectable)]
 #[diesel(table_name = schema::messages)]
 #[diesel(check_for_backend(diesel::mysql::Mysql))]
 pub struct Message {
@@ -20,6 +20,6 @@ pub struct Message {
     pub sender: String,
     pub receiver: String,
     pub content: String,
-    pub sent_at: DateTime<Utc>,
-    pub read_at: Option<DateTime<Utc>>,
+    pub sent_at: NaiveDateTime,
+    pub read_at: Option<NaiveDateTime>,
 }
