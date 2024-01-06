@@ -1,5 +1,11 @@
 <li style="display: none;" id="hidden-refresh">
-    <input type="hidden" name="timestamp" hx-get="/conversations/{{ peer }}/poll" value="{{ timestamp|urlencode }}" hx-target="closest li" hx-swap="outerHTML" hx-trigger="every 10s"/>
+    <form hx-get="/conversations/{{ peer }}/poll" hx-target="closest li" hx-swap="outerHTML" hx-trigger="every 10s">
+        {% match last_seen_message_id -%}
+            {% when Some with (message_id) -%} 
+                <input type="hidden" name="last-seen-message-id" value="{{ message_id }}"/>
+            {% else %}
+        {% endmatch %}
+    </form>
 </li>
 {% for message in messages -%}
     {{ message|safe }}

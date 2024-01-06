@@ -8,7 +8,6 @@ use axum::{
     Form, Router,
 };
 use axum_extra::either::Either;
-use chrono::{DateTime, Utc};
 use diesel::{
     alias,
     dsl::{exists, not},
@@ -85,7 +84,7 @@ async fn get_latest_messages(
                             .eq(username.as_str())
                             .and(later_messages.field(sender).eq(receiver)),
                     )
-                    .filter(later_messages.field(sent_at).gt(sent_at)),
+                    .filter(later_messages.field(id).gt(id)),
             ))),
         )
         .or_filter(
@@ -103,7 +102,7 @@ async fn get_latest_messages(
                             .eq(username.as_str())
                             .and(later_messages.field(sender).eq(sender)),
                     )
-                    .filter(later_messages.field(sent_at).gt(sent_at)),
+                    .filter(later_messages.field(id).gt(id)),
             ))),
         )
         .order_by(sent_at.desc())
@@ -139,7 +138,7 @@ pub struct GetConversation {
 #[template(path = "auto-refresh-messages.html")]
 pub struct AutoRefreshMessages {
     messages: Vec<Message>,
-    timestamp: DateTime<Utc>,
+    last_seen_message_id: Option<u64>,
     peer: String,
 }
 
@@ -186,6 +185,11 @@ pub async fn get_conversation(
         .await
         .unwrap();
 
+    let last_seen_message_id = messages_in_convo
+        .as_slice()
+        .first()
+        .map(|message| message.id);
+
     let conversation = ConversationView {
         messages: AutoRefreshMessages {
             peer,
@@ -193,7 +197,7 @@ pub async fn get_conversation(
                 .into_iter()
                 .map(|msg| (msg.sender == username.as_str(), msg).into())
                 .collect(),
-            timestamp: Utc::now(),
+            last_seen_message_id,
         },
     };
 
@@ -225,7 +229,8 @@ pub struct SendMessagePath {
 pub struct SendMessageForm {
     #[serde(rename = "new-message-content")]
     new_message_content: String,
-    timestamp: String,
+    #[serde(rename = "last-seen-message-id")]
+    last_seen_message_id: Option<u64>,
 }
 
 pub async fn send_message(
@@ -234,12 +239,9 @@ pub async fn send_message(
     username: Username,
     Form(SendMessageForm {
         new_message_content,
-        timestamp,
+        last_seen_message_id,
     }): Form<SendMessageForm>,
 ) -> Result<AutoRefreshMessages, StatusCode> {
-    let timestamp = urlencoding::decode(&timestamp).map_err(|_| StatusCode::BAD_REQUEST)?;
-    let timestamp: DateTime<Utc> = timestamp.parse().map_err(|_| StatusCode::BAD_REQUEST)?;
-
     model::NewMessage {
         sender: username.to_owned(),
         receiver: peer.clone(),
@@ -256,19 +258,26 @@ pub async fn send_message(
     let new_messages = messages
         .filter(sender.eq(username.as_str()).and(receiver.eq(&peer)))
         .or_filter(sender.eq(&peer).and(receiver.eq(username.as_str())))
-        .filter(sent_at.ge(timestamp.naive_utc()))
         .select(model::Message::as_select())
-        .order_by(messages::sent_at.desc())
-        .load(db.get().await.unwrap().as_mut())
-        .await
-        .unwrap();
+        .order_by(messages::sent_at.desc());
+
+    let mut db = db.get().await.unwrap();
+    let new_messages = if let Some(last_seen_id) = last_seen_message_id {
+        new_messages.filter(id.gt(last_seen_id)).load(db.as_mut())
+    } else {
+        new_messages.load(db.as_mut())
+    }
+    .await
+    .unwrap();
+
+    let last_seen_message_id = new_messages.as_slice().first().map(|message| message.id);
 
     Ok(AutoRefreshMessages {
         messages: new_messages
             .into_iter()
             .map(|msg| (username.as_str() == msg.sender, msg).into())
             .collect(),
-        timestamp: Utc::now(),
+        last_seen_message_id,
         peer,
     })
 }
@@ -280,32 +289,39 @@ pub struct GetNewMessagesPath {
 
 #[derive(Debug, Clone, Deserialize)]
 pub struct GetNewMessagesQuery {
-    timestamp: String,
+    #[serde(alias = "last-seen-message-id")]
+    last_seen_message_id: Option<u64>,
 }
 
 pub async fn get_new_messages(
     State(Application { db }): State<Application>,
     Path(GetNewMessagesPath { peer }): Path<GetNewMessagesPath>,
-    Query(GetNewMessagesQuery { timestamp }): Query<GetNewMessagesQuery>,
+    Query(GetNewMessagesQuery {
+        last_seen_message_id,
+    }): Query<GetNewMessagesQuery>,
     username: Username,
 ) -> Result<AutoRefreshMessages, StatusCode> {
-    let timestamp = urlencoding::decode(&timestamp).map_err(|_| StatusCode::BAD_REQUEST)?;
-    let timestamp: DateTime<Utc> = timestamp.parse().map_err(|_| StatusCode::BAD_REQUEST)?;
-
     use crate::model::schema::messages::dsl::*;
     use schema::messages;
 
     let new_messages = messages
         .filter(sender.eq(username.as_str()).and(receiver.eq(&peer)))
         .or_filter(sender.eq(&peer).and(receiver.eq(username.as_str())))
-        .filter(sent_at.ge(timestamp.naive_utc()))
         .select(model::Message::as_select())
-        .order_by(messages::sent_at.desc())
-        .load(db.get().await.unwrap().as_mut())
-        .await
-        .unwrap();
+        .order_by(messages::sent_at.desc());
 
-    if new_messages.is_empty() {
+    let mut db = db.get().await.unwrap();
+    let new_messages = if let Some(last_seen_id) = last_seen_message_id {
+        new_messages.filter(id.gt(last_seen_id)).load(db.as_mut())
+    } else {
+        new_messages.load(db.as_mut())
+    }
+    .await
+    .unwrap();
+
+    let last_seen_message_id = new_messages.as_slice().first().map(|message| message.id);
+
+    if last_seen_message_id.is_none() {
         return Err(StatusCode::NO_CONTENT);
     };
 
@@ -314,7 +330,7 @@ pub async fn get_new_messages(
             .into_iter()
             .map(|msg| (username.as_str() == msg.sender, msg).into())
             .collect(),
-        timestamp: Utc::now(),
+        last_seen_message_id,
         peer,
     })
 }
