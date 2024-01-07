@@ -1,4 +1,4 @@
-use std::borrow::BorrowMut;
+use std::borrow::{BorrowMut, Cow};
 
 use askama::Template;
 use axum::{
@@ -19,6 +19,7 @@ use serde::Deserialize;
 use crate::model::{
     self,
     schema::{self, messages::dsl},
+    Message as DbMessage,
 };
 
 use super::{Application, Content, HtmxRequest, Root, Username};
@@ -142,6 +143,21 @@ pub struct AutoRefreshMessages {
     peer: String,
 }
 
+impl AutoRefreshMessages {
+    pub fn new<'a>(messages: Vec<DbMessage>, user: &str, peer: impl Into<Cow<'a, str>>) -> Self {
+        let last_seen_message_id = messages.as_slice().first().map(|message| message.id);
+
+        Self {
+            peer: peer.into().into_owned(),
+            messages: messages
+                .into_iter()
+                .map(|msg| (msg.sender == user, msg).into())
+                .collect(),
+            last_seen_message_id,
+        }
+    }
+}
+
 #[derive(Template, Default)]
 #[template(path = "conversation.html")]
 pub struct ConversationView {
@@ -174,31 +190,13 @@ pub async fn get_conversation(
     Path(GetConversation { peer }): Path<GetConversation>,
     username: Username,
 ) -> Either<Root, ConversationView> {
-    use crate::model::schema::messages::dsl::*;
-
-    let messages_in_convo = messages
-        .filter(sender.eq(username.as_str()).and(receiver.eq(&peer)))
-        .or_filter(sender.eq(&peer).and(receiver.eq(username.as_str())))
-        .order_by(sent_at.desc())
-        .select(model::Message::as_select())
+    let messages_in_convo = DbMessage::between((&peer, &username))
         .load(db.get().await.unwrap().as_mut())
         .await
         .unwrap();
 
-    let last_seen_message_id = messages_in_convo
-        .as_slice()
-        .first()
-        .map(|message| message.id);
-
     let conversation = ConversationView {
-        messages: AutoRefreshMessages {
-            peer,
-            messages: messages_in_convo
-                .into_iter()
-                .map(|msg| (msg.sender == username.as_str(), msg).into())
-                .collect(),
-            last_seen_message_id,
-        },
+        messages: AutoRefreshMessages::new(messages_in_convo, &username, &peer),
     };
 
     dbg!(&htmx);
@@ -252,34 +250,16 @@ pub async fn send_message(
     .await
     .unwrap();
 
-    use crate::model::schema::messages::dsl::*;
-    use schema::messages;
-
-    let new_messages = messages
-        .filter(sender.eq(username.as_str()).and(receiver.eq(&peer)))
-        .or_filter(sender.eq(&peer).and(receiver.eq(username.as_str())))
-        .select(model::Message::as_select())
-        .order_by(messages::sent_at.desc());
-
     let mut db = db.get().await.unwrap();
     let new_messages = if let Some(last_seen_id) = last_seen_message_id {
-        new_messages.filter(id.gt(last_seen_id)).load(db.as_mut())
+        DbMessage::between_after((&peer, &username), last_seen_id).load(db.as_mut())
     } else {
-        new_messages.load(db.as_mut())
+        DbMessage::between((&peer, &username)).load(db.as_mut())
     }
     .await
     .unwrap();
 
-    let last_seen_message_id = new_messages.as_slice().first().map(|message| message.id);
-
-    Ok(AutoRefreshMessages {
-        messages: new_messages
-            .into_iter()
-            .map(|msg| (username.as_str() == msg.sender, msg).into())
-            .collect(),
-        last_seen_message_id,
-        peer,
-    })
+    Ok(AutoRefreshMessages::new(new_messages, &username, &peer))
 }
 
 #[derive(Debug, Clone, Deserialize)]
@@ -301,36 +281,19 @@ pub async fn get_new_messages(
     }): Query<GetNewMessagesQuery>,
     username: Username,
 ) -> Result<AutoRefreshMessages, StatusCode> {
-    use crate::model::schema::messages::dsl::*;
-    use schema::messages;
-
-    let new_messages = messages
-        .filter(sender.eq(username.as_str()).and(receiver.eq(&peer)))
-        .or_filter(sender.eq(&peer).and(receiver.eq(username.as_str())))
-        .select(model::Message::as_select())
-        .order_by(messages::sent_at.desc());
-
     let mut db = db.get().await.unwrap();
+
     let new_messages = if let Some(last_seen_id) = last_seen_message_id {
-        new_messages.filter(id.gt(last_seen_id)).load(db.as_mut())
+        DbMessage::between_after((&peer, &username), last_seen_id).load(db.as_mut())
     } else {
-        new_messages.load(db.as_mut())
+        DbMessage::between((&peer, &username)).load(db.as_mut())
     }
     .await
     .unwrap();
 
-    let last_seen_message_id = new_messages.as_slice().first().map(|message| message.id);
-
-    if last_seen_message_id.is_none() {
+    if new_messages.is_empty() {
         return Err(StatusCode::NO_CONTENT);
     };
 
-    Ok(AutoRefreshMessages {
-        messages: new_messages
-            .into_iter()
-            .map(|msg| (username.as_str() == msg.sender, msg).into())
-            .collect(),
-        last_seen_message_id,
-        peer,
-    })
+    Ok(AutoRefreshMessages::new(new_messages, &username, &peer))
 }
