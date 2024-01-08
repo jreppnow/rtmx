@@ -8,7 +8,7 @@ edition = "2021"
 [dependencies]
 askama = "0.12.1"
 askama_axum = "0.4.0"
-axum = "0.7.2"
+axum = "0.7.3"
 axum-extra = { version = "0.9.1", features = ["cookie"] }
 axum-macros = "0.4.0"
 chrono = { version = "0.4.31", features = ["serde"] }
