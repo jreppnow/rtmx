@@ -92,17 +92,28 @@ pub async fn validate_username(
 pub struct Username(String);
 
 impl Username {
-    fn new<'a>(s: impl Into<Cow<'a, str>>) -> Option<Self> {
+    pub fn new<'a>(s: impl Into<Cow<'a, str>>) -> Option<Self> {
         let s = s.into();
-        if s.is_empty() || "test" == s {
+        if s.is_empty()
+            || s.len() > 20
+            || !s.bytes().enumerate().all(|(index, byte)| {
+                byte.is_ascii_lowercase()
+                    || byte.is_ascii_uppercase()
+                    || (index > 0 && byte.is_ascii_digit())
+            })
+        {
             return None;
         }
-        // TODO: validation!
+
         Some(Self(s.into_owned()))
     }
 
     pub fn as_str(&self) -> &str {
         &self.0
+    }
+
+    pub fn into_inner(self) -> String {
+        self.0
     }
 }
 

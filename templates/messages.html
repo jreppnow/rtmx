@@ -1,19 +1,9 @@
 <div id="messages-container">
     <aside id="conversations-list">
-        <ul>
-            {% for conversation in conversations -%}
-                <li hx-get="/conversations/{{ conversation.peer }}" hx-target="#conversation-content" hx-push-url="true">
-                    <header> 
-                        <span class="conversation-name">{{ conversation.peer }}</span>
-                        <span class="conversation-date">{{ conversation.date }}</span>
-                    </header>
-                    <span class="message-preview">
-                        {{ conversation.preview }}
-                    </span>
-                </li>
-            {% endfor %}
-        </ul>
-
+        <form hx-get="/conversations-list/poll" hx-target="#conversation-dynamic-bits" hx-swap="innerHTML" hx-trigger="every 20s">
+            <input type="text" name="search-needle" hx-include="closest form" hx-get="/conversations-list/search" hx-target="#conversation-dynamic-bits" hx-swap="innerHTML" hx-trigger="keyup delay:200ms"/>
+            {{ conversations|safe }}
+        </form>
     </aside>
     <main id="conversation-content">
         {% match selected -%}

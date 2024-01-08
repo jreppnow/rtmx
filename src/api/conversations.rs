@@ -1,5 +1,6 @@
 use std::{
     borrow::{BorrowMut, Cow},
+    cmp::max,
     fmt::Display,
 };
 
@@ -13,7 +14,7 @@ use axum::{
 use axum_extra::either::Either;
 use diesel::prelude::*;
 use diesel_async::RunQueryDsl;
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 
 use crate::model::{self, schema::messages::dsl, Message as DbMessage};
 
@@ -33,7 +34,7 @@ pub fn router() -> Router<Application> {
 #[derive(Template, Default)]
 #[template(path = "messages.html")]
 pub struct MessagesPage {
-    conversations: Vec<ConversationPreview>,
+    conversations: ConversationItems,
     selected: Option<ConversationView>,
 }
 
@@ -42,10 +43,11 @@ struct ConversationPreview {
     peer: String,
     date: String,
     preview: String,
+    selected: bool,
 }
 
-impl From<(model::Message, &str)> for ConversationPreview {
-    fn from((message, username): (model::Message, &str)) -> Self {
+impl ConversationPreview {
+    fn new(message: DbMessage, username: &str, selected: bool) -> Self {
         Self {
             peer: if message.sender == username {
                 message.receiver
@@ -54,6 +56,7 @@ impl From<(model::Message, &str)> for ConversationPreview {
             },
             date: message.sent_at.to_string(),
             preview: message.content,
+            selected,
         }
     }
 }
@@ -69,12 +72,19 @@ pub async fn get_conversations(
         .await
         .unwrap();
 
+    let last_seen_id = most_recent_messages.as_slice().first().map(|msg| msg.id);
+
     Root {
         content: Content::Messages(MessagesPage {
-            conversations: most_recent_messages
-                .into_iter()
-                .map(|message| (message, username.as_str()).into())
-                .collect(),
+            conversations: ConversationItems {
+                conversations: most_recent_messages
+                    .into_iter()
+                    .map(|message| ConversationPreview::new(message, username.as_str(), false))
+                    .collect(),
+                hidden_selected: None,
+                start_new: None,
+                last_seen_id,
+            },
             selected: None,
         }),
     }
@@ -160,12 +170,28 @@ pub async fn get_conversation(
             .await
             .unwrap();
 
+        let last_seen_id = most_recent_messages.as_slice().first().map(|msg| msg.id);
+
+        let hidden_selected = (!most_recent_messages
+            .iter()
+            .any(|msg| msg.is_between((&username, &peer))))
+        .then_some(peer.clone());
+
         Either::E1(Root {
             content: Content::Messages(MessagesPage {
-                conversations: most_recent_messages
-                    .into_iter()
-                    .map(|message| (message, username.as_str()).into())
-                    .collect(),
+                conversations: ConversationItems {
+                    conversations: most_recent_messages
+                        .into_iter()
+                        .map(|message| {
+                            let selected = message.sender.as_str() == peer
+                                || message.receiver.as_str() == peer;
+                            ConversationPreview::new(message, username.as_str(), selected)
+                        })
+                        .collect(),
+                    start_new: None,
+                    hidden_selected,
+                    last_seen_id,
+                },
                 selected: Some(conversation),
             }),
         })
@@ -343,4 +369,97 @@ pub async fn load_more(
             .collect(),
         lazy_load,
     }
+}
+
+#[derive(Template, Debug, Clone, Default)]
+#[template(path = "conversation-items.html")]
+pub struct ConversationItems {
+    conversations: Vec<ConversationPreview>,
+    hidden_selected: Option<String>,
+    start_new: Option<String>,
+    last_seen_id: Option<u64>,
+}
+
+#[derive(Debug, Clone, Deserialize, Serialize, PartialEq)]
+#[serde(rename_all = "kebab-case")]
+pub enum RequestType {
+    Poll,
+    Search,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+#[serde(rename_all = "kebab-case")]
+pub struct GetConversationPreviewsQuery {
+    last_seen_id: Option<u64>,
+    selected_conversation: Option<String>,
+    search_needle: String,
+}
+
+pub async fn get_conversation_previews(
+    State(Application { db }): State<Application>,
+    Path(_request_type): Path<RequestType>,
+    Query(GetConversationPreviewsQuery {
+        last_seen_id,
+        selected_conversation,
+        search_needle,
+    }): Query<GetConversationPreviewsQuery>,
+    username: Username,
+) -> Result<ConversationItems, StatusCode> {
+    let mut db = db.get().await.unwrap();
+
+    let mut most_recent_messages = DbMessage::most_recent(&username)
+        .load(&mut db)
+        .await
+        .unwrap();
+
+    if !search_needle.is_empty() {
+        most_recent_messages.retain(|msg| {
+            (msg.sender == username.as_str() && msg.receiver.contains(&search_needle))
+                || (msg.receiver == username.as_str() && msg.sender.contains(&search_needle))
+        });
+    }
+
+    // TODO: logic to cancel requests with no updates on (polling only)
+
+    let newest_id = most_recent_messages.as_slice().first().map(|msg| msg.id);
+
+    let last_seen_id = match (last_seen_id, newest_id) {
+        (Some(last_seen_id), Some(newest_id)) => Some(max(last_seen_id, newest_id)),
+        (id @ Some(_), None) | (None, id @ Some(_)) => id,
+        (None, None) => None,
+    };
+
+    let hidden_selected = selected_conversation.as_ref().and_then(|peer| {
+        if most_recent_messages
+            .iter()
+            .any(|msg| msg.is_between((peer, &username)))
+        {
+            None
+        } else {
+            Some(peer.to_owned())
+        }
+    });
+
+    let start_new = Username::new(&search_needle)
+        .filter(|peer| {
+            !most_recent_messages
+                .iter()
+                .any(|msg| msg.is_between((&username, &peer)))
+        })
+        .map(Username::into_inner);
+
+    Ok(ConversationItems {
+        conversations: most_recent_messages
+            .into_iter()
+            .map(|message| {
+                let selected = selected_conversation
+                    .as_ref()
+                    .is_some_and(|peer| message.is_between((peer, &username)));
+                ConversationPreview::new(message, username.as_str(), selected)
+            })
+            .collect(),
+        start_new,
+        hidden_selected,
+        last_seen_id,
+    })
 }

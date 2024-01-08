@@ -27,6 +27,10 @@ pub fn router() -> Router<Application> {
         .nest_service("/static", ServeDir::new("static/"))
         .nest("/login", login::router())
         .nest("/conversations", conversations::router())
+        .route(
+            "/conversations-list/:request-type",
+            get(conversations::get_conversation_previews),
+        )
         .route("/", get(|| async { Redirect::permanent("/conversations") }))
         .fallback(|| async { (StatusCode::NOT_FOUND, "Not a valid url on this server!") })
 }

@@ -88,6 +88,7 @@ body {
             list-style-type: none;
             border: 2px solid;
             padding: 2px;
+            position: relative;
 
             & header {
                 display: flex;
@@ -98,6 +99,13 @@ body {
                 & .conversation-name {
                     font-size: 1.5rem;
                 }
+            }
+
+            & input {
+                appearance: none;
+                position: absolute;
+                height: 100%;
+                width: 100%;
             }
         }
 

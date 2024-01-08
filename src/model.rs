@@ -84,6 +84,11 @@ impl Message {
     ) -> BeforeLimited<'a, DB> {
         Self::before(peers, id).limit(limit as i64)
     }
+
+    pub fn is_between(&self, (peer1, peer2): (&str, &str)) -> bool {
+        (self.sender == peer1 && self.receiver == peer2)
+            || (self.sender == peer2 && self.receiver == peer1)
+    }
 }
 
 type IsBetween<'a, C1, C2, E> =

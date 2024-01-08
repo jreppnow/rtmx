@@ -1,0 +1,39 @@
+<div id="conversation-dynamic-bits">
+    {% match last_seen_id -%} 
+        {% when Some with (last_seen_id) -%}
+            <input name="last-seen-id" value="{{last_seen_id}}" type="hidden">
+        {% else -%}
+    {% endmatch %}
+    <ul id="conversation-ul">
+        {% match start_new -%}
+            {% when Some with (start_new) -%} 
+                <li hx-get="/conversations/{{ start_new }}" hx-target="#conversation-content" hx-push-url="true" >
+                    <input type="radio" name="selected-conversation" value="{{ start_new }}"/>
+                    <span class="start-new-conversation-text">
+                        Start a new conversation with {{ start_new }}...
+                    </span>
+                </li>
+            {% else %}
+        {% endmatch %}
+        {% for conversation in conversations -%}
+            <li hx-get="/conversations/{{ conversation.peer }}" hx-target="#conversation-content" hx-push-url="true" >
+                <input type="radio" name="selected-conversation" value="{{ conversation.peer }}" {% if conversation.selected %}checked{% endif %}/>
+                <header> 
+                    <span class="conversation-name">{{ conversation.peer }}</span>
+                    <span class="conversation-date">{{ conversation.date }}</span>
+                </header>
+                <span class="message-preview">
+                    {{ conversation.preview }}
+                </span>
+            </li>
+        {% endfor %}
+        {% match hidden_selected -%}
+            {% when Some with (hidden_selected) -%} 
+                <li style="display: none;">
+                    <input type="radio" name="selected-conversation" value="{{ hidden_selected }}" checked/>
+                </li>
+            {% else %}
+        {% endmatch %}
+    </ul>
+</div>
+
