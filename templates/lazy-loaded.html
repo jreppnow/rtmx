@@ -1,0 +1,21 @@
+{% match lazy_load -%}
+    {% when Some with (lazy_load) -%}
+        {% match lazy_load.direction -%}
+            {% when LoadDirection::Later -%}
+                {{ lazy_load|safe }}
+            {% else -%}
+        {% endmatch %}
+    {% else -%}
+{% endmatch %}
+{% for message in messages -%}
+    {{ message|safe }}
+{% endfor %}
+{% match lazy_load -%}
+    {% when Some with (lazy_load) -%}
+        {% match lazy_load.direction -%}
+            {% when LoadDirection::Earlier -%}
+                {{ lazy_load|safe }}
+            {% else -%}
+        {% endmatch %}
+    {% else -%}
+{% endmatch %}

@@ -1,4 +1,7 @@
-use std::borrow::{BorrowMut, Cow};
+use std::{
+    borrow::{BorrowMut, Cow},
+    fmt::Display,
+};
 
 use askama::Template;
 use axum::{
@@ -16,12 +19,15 @@ use crate::model::{self, schema::messages::dsl, Message as DbMessage};
 
 use super::{Application, Content, HtmxRequest, Root, Username};
 
+const MESSAGE_LIMIT: usize = 10;
+
 pub fn router() -> Router<Application> {
     Router::new()
         .route("/", get(get_conversations))
         .route("/:peer", get(get_conversation))
         .route("/:peer", post(send_message))
         .route("/:peer/poll", get(get_new_messages))
+        .route("/:peer/:direction", get(load_more))
 }
 
 #[derive(Template, Default)]
@@ -106,6 +112,7 @@ impl AutoRefreshMessages {
 #[template(path = "conversation.html")]
 pub struct ConversationView {
     messages: AutoRefreshMessages,
+    lazy_load: Option<LoadMore>,
 }
 
 #[derive(Template, Debug, Clone)]
@@ -134,16 +141,17 @@ pub async fn get_conversation(
     Path(GetConversation { peer }): Path<GetConversation>,
     username: Username,
 ) -> Either<Root, ConversationView> {
-    let messages_in_convo = DbMessage::between((&peer, &username))
+    let messages_in_convo = DbMessage::limited((&peer, &username), MESSAGE_LIMIT)
         .load(db.get().await.unwrap().as_mut())
         .await
         .unwrap();
 
+    let lazy_load = LoadMore::new(LoadDirection::Earlier, &messages_in_convo, peer.clone());
+
     let conversation = ConversationView {
         messages: AutoRefreshMessages::new(messages_in_convo, &username, &peer),
+        lazy_load,
     };
-
-    dbg!(&htmx);
 
     if let None | Some(HtmxRequest { restore: true, .. }) = htmx {
         let mut db = db.get().await.unwrap();
@@ -200,7 +208,7 @@ pub async fn send_message(
 
     let mut db = db.get().await.unwrap();
     let new_messages = if let Some(last_seen_id) = last_seen_message_id {
-        DbMessage::between_after((&peer, &username), last_seen_id).load(db.as_mut())
+        DbMessage::after((&peer, &username), last_seen_id).load(db.as_mut())
     } else {
         DbMessage::between((&peer, &username)).load(db.as_mut())
     }
@@ -232,7 +240,7 @@ pub async fn get_new_messages(
     let mut db = db.get().await.unwrap();
 
     let new_messages = if let Some(last_seen_id) = last_seen_message_id {
-        DbMessage::between_after((&peer, &username), last_seen_id).load(db.as_mut())
+        DbMessage::after((&peer, &username), last_seen_id).load(db.as_mut())
     } else {
         DbMessage::between((&peer, &username)).load(db.as_mut())
     }
@@ -244,4 +252,95 @@ pub async fn get_new_messages(
     };
 
     Ok(AutoRefreshMessages::new(new_messages, &username, &peer))
+}
+
+#[derive(Debug, Clone, Deserialize)]
+#[serde(rename_all = "kebab-case")]
+pub enum LoadDirection {
+    Earlier,
+    Later,
+}
+
+impl Display for LoadDirection {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(
+            f,
+            "{}",
+            match self {
+                LoadDirection::Earlier => "earlier",
+                LoadDirection::Later => "later",
+            }
+        )
+    }
+}
+
+#[derive(Template, Debug, Clone)]
+#[template(path = "load-more.html")]
+pub struct LoadMore {
+    peer: String,
+    id: u64,
+    direction: LoadDirection,
+}
+
+impl LoadMore {
+    pub fn new(direction: LoadDirection, messages: &[DbMessage], peer: String) -> Option<Self> {
+        match direction {
+            LoadDirection::Earlier => messages.last(),
+            LoadDirection::Later => messages.first(),
+        }
+        .filter(|_| messages.len() == MESSAGE_LIMIT)
+        .map(|last_msg| Self {
+            peer: peer.clone(),
+            id: last_msg.id,
+            direction,
+        })
+    }
+}
+
+#[derive(Debug, Clone, Deserialize)]
+pub struct LoadMorePath {
+    peer: String,
+    direction: LoadDirection,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+pub struct LoadMoreQuery {
+    id: u64,
+}
+
+#[derive(Template, Debug, Clone)]
+#[template(path = "lazy-loaded.html")]
+pub struct LazyLoaded {
+    messages: Vec<Message>,
+    lazy_load: Option<LoadMore>,
+}
+
+pub async fn load_more(
+    State(Application { db }): State<Application>,
+    Path(LoadMorePath { peer, direction }): Path<LoadMorePath>,
+    Query(LoadMoreQuery { id }): Query<LoadMoreQuery>,
+    username: Username,
+) -> LazyLoaded {
+    let mut db = db.get().await.unwrap();
+
+    let messages = match direction {
+        LoadDirection::Earlier => {
+            DbMessage::before_limited((&username, &peer), id, MESSAGE_LIMIT).load(&mut db)
+        }
+        LoadDirection::Later => {
+            DbMessage::after_limited((&username, &peer), id, MESSAGE_LIMIT).load(&mut db)
+        }
+    }
+    .await
+    .unwrap();
+
+    let lazy_load = LoadMore::new(direction, &messages, peer.clone());
+
+    LazyLoaded {
+        messages: messages
+            .into_iter()
+            .map(|msg| (msg.sender.as_str() == username.as_str(), msg).into())
+            .collect(),
+        lazy_load,
+    }
 }

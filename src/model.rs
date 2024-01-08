@@ -26,7 +26,7 @@ pub struct Message {
     pub read_at: Option<NaiveDateTime>,
 }
 
-use diesel::dsl::{exists, not, And, AsSelect, Desc, Eq, Filter, Gt, Or, Order, Select};
+use diesel::dsl::{exists, not, And, AsSelect, Desc, Eq, Filter, Gt, Limit, Lt, Or, Order, Select};
 
 type All<DB> =
     Order<Select<schema::messages::table, AsSelect<Message, DB>>, Desc<schema::messages::id>>;
@@ -34,7 +34,14 @@ type Between<'a, DB> = Filter<
     All<DB>,
     IsBetween<'a, schema::messages::columns::sender, schema::messages::columns::receiver, &'a str>,
 >;
+
 type After<'a, DB> = Filter<Between<'a, DB>, Gt<schema::messages::id, u64>>;
+type Before<'a, DB> = Filter<Between<'a, DB>, Lt<schema::messages::id, u64>>;
+
+type AfterLimited<'a, DB> = Limit<After<'a, DB>>;
+type BeforeLimited<'a, DB> = Limit<Before<'a, DB>>;
+
+type Limited<'a, DB> = Limit<Between<'a, DB>>;
 
 impl Message {
     pub fn all<DB: Backend>() -> All<DB> {
@@ -50,8 +57,32 @@ impl Message {
         ))
     }
 
-    pub fn between_after<'a, DB: Backend>(peers: (&'a str, &'a str), id: u64) -> After<'a, DB> {
+    pub fn limited<'a, DB: Backend>(peers: (&'a str, &'a str), limit: usize) -> Limited<'a, DB> {
+        Self::between(peers).limit(limit as i64)
+    }
+
+    pub fn after<'a, DB: Backend>(peers: (&'a str, &'a str), id: u64) -> After<'a, DB> {
         Self::between(peers).filter(schema::messages::id.gt(id))
+    }
+
+    pub fn before<'a, DB: Backend>(peers: (&'a str, &'a str), id: u64) -> Before<'a, DB> {
+        Self::between(peers).filter(schema::messages::id.lt(id))
+    }
+
+    pub fn after_limited<'a, DB: Backend>(
+        peers: (&'a str, &'a str),
+        id: u64,
+        limit: usize,
+    ) -> AfterLimited<'a, DB> {
+        Self::after(peers, id).limit(limit as i64)
+    }
+
+    pub fn before_limited<'a, DB: Backend>(
+        peers: (&'a str, &'a str),
+        id: u64,
+        limit: usize,
+    ) -> BeforeLimited<'a, DB> {
+        Self::before(peers, id).limit(limit as i64)
     }
 }
 
