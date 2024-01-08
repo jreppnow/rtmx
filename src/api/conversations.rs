@@ -8,19 +8,11 @@ use axum::{
     Form, Router,
 };
 use axum_extra::either::Either;
-use diesel::{
-    alias,
-    dsl::{exists, not},
-    prelude::*,
-};
-use diesel_async::{AsyncConnection, RunQueryDsl};
+use diesel::prelude::*;
+use diesel_async::RunQueryDsl;
 use serde::Deserialize;
 
-use crate::model::{
-    self,
-    schema::{self, messages::dsl},
-    Message as DbMessage,
-};
+use crate::model::{self, schema::messages::dsl, Message as DbMessage};
 
 use super::{Application, Content, HtmxRequest, Root, Username};
 
@@ -60,64 +52,16 @@ impl From<(model::Message, &str)> for ConversationPreview {
     }
 }
 
-async fn get_latest_messages(
-    mut db: impl AsyncConnection<Backend = diesel::mysql::Mysql>,
-    username: &Username,
-) -> Vec<model::Message> {
-    use crate::model::schema::messages::dsl::*;
-    use schema::messages;
-
-    let later_messages = alias!(messages as later_messages);
-
-    messages
-        .filter(
-            sender.eq(username.as_str()).and(not(exists(
-                later_messages
-                    .filter(
-                        later_messages
-                            .field(sender)
-                            .eq(username.as_str())
-                            .and(later_messages.field(receiver).eq(receiver)),
-                    )
-                    .or_filter(
-                        later_messages
-                            .field(receiver)
-                            .eq(username.as_str())
-                            .and(later_messages.field(sender).eq(receiver)),
-                    )
-                    .filter(later_messages.field(id).gt(id)),
-            ))),
-        )
-        .or_filter(
-            receiver.eq(username.as_str()).and(not(exists(
-                later_messages
-                    .filter(
-                        later_messages
-                            .field(sender)
-                            .eq(username.as_str())
-                            .and(later_messages.field(receiver).eq(sender)),
-                    )
-                    .or_filter(
-                        later_messages
-                            .field(receiver)
-                            .eq(username.as_str())
-                            .and(later_messages.field(sender).eq(sender)),
-                    )
-                    .filter(later_messages.field(id).gt(id)),
-            ))),
-        )
-        .order_by(sent_at.desc())
-        .select(model::Message::as_select())
-        .load(&mut db)
-        .await
-        .unwrap()
-}
-
 pub async fn get_conversations(
     State(Application { db }): State<Application>,
     username: Username,
 ) -> Root {
-    let most_recent_messages = get_latest_messages(db.get().await.unwrap(), &username).await;
+    let mut db = db.get().await.unwrap();
+
+    let most_recent_messages = DbMessage::most_recent(&username)
+        .load(&mut db)
+        .await
+        .unwrap();
 
     Root {
         content: Content::Messages(MessagesPage {
@@ -202,7 +146,11 @@ pub async fn get_conversation(
     dbg!(&htmx);
 
     if let None | Some(HtmxRequest { restore: true, .. }) = htmx {
-        let most_recent_messages = get_latest_messages(db.get().await.unwrap(), &username).await;
+        let mut db = db.get().await.unwrap();
+        let most_recent_messages = DbMessage::most_recent(&username)
+            .load(&mut db)
+            .await
+            .unwrap();
 
         Either::E1(Root {
             content: Content::Messages(MessagesPage {
