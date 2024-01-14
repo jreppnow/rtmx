@@ -18,7 +18,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::model::{self, schema::messages::dsl, Message as DbMessage};
 
-use super::{Application, Content, HtmxRequest, Root, Username};
+use super::{Application, Content, HtmxRequest, HxTrigger, Root, Username};
 
 const MESSAGE_LIMIT: usize = 10;
 
@@ -221,7 +221,7 @@ pub async fn send_message(
         new_message_content,
         last_seen_message_id,
     }): Form<SendMessageForm>,
-) -> Result<AutoRefreshMessages, StatusCode> {
+) -> Result<(HxTrigger, AutoRefreshMessages), StatusCode> {
     model::NewMessage {
         sender: username.to_owned(),
         receiver: peer.clone(),
@@ -241,7 +241,10 @@ pub async fn send_message(
     .await
     .unwrap();
 
-    Ok(AutoRefreshMessages::new(new_messages, &username, &peer))
+    Ok((
+        HxTrigger::NameOnly("new-message-in-active-conversation".into()),
+        AutoRefreshMessages::new(new_messages, &username, &peer),
+    ))
 }
 
 #[derive(Debug, Clone, Deserialize)]
@@ -262,7 +265,7 @@ pub async fn get_new_messages(
         last_seen_message_id,
     }): Query<GetNewMessagesQuery>,
     username: Username,
-) -> Result<AutoRefreshMessages, StatusCode> {
+) -> Result<(HxTrigger, AutoRefreshMessages), StatusCode> {
     let mut db = db.get().await.unwrap();
 
     let new_messages = if let Some(last_seen_id) = last_seen_message_id {
@@ -277,7 +280,10 @@ pub async fn get_new_messages(
         return Err(StatusCode::NO_CONTENT);
     };
 
-    Ok(AutoRefreshMessages::new(new_messages, &username, &peer))
+    Ok((
+        HxTrigger::NameOnly("new-message-in-active-conversation".into()),
+        AutoRefreshMessages::new(new_messages, &username, &peer),
+    ))
 }
 
 #[derive(Debug, Clone, Deserialize)]

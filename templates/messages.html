@@ -1,6 +1,6 @@
 <div id="messages-container">
     <aside id="conversations-list">
-        <form hx-get="/conversations-list/poll" hx-target="#conversation-dynamic-bits" hx-swap="innerHTML" hx-trigger="every 20s">
+        <form hx-get="/conversations-list/poll" hx-target="#conversation-dynamic-bits" hx-swap="innerHTML" hx-trigger="every 20s,new-message-in-active-conversation from:body">
             <input type="text" name="search-needle" hx-include="closest form" hx-get="/conversations-list/search" hx-target="#conversation-dynamic-bits" hx-swap="innerHTML" hx-trigger="keyup delay:200ms"/>
             {{ conversations|safe }}
         </form>
