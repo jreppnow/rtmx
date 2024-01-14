@@ -34,7 +34,6 @@ pub fn router() -> Router<Application> {
 #[derive(Template, Default)]
 #[template(path = "messages.html")]
 pub struct MessagesPage {
-    conversations: ConversationItems,
     selected: Option<ConversationView>,
 }
 
@@ -61,32 +60,9 @@ impl ConversationPreview {
     }
 }
 
-pub async fn get_conversations(
-    State(Application { db }): State<Application>,
-    username: Username,
-) -> Root {
-    let mut db = db.get().await.unwrap();
-
-    let most_recent_messages = DbMessage::most_recent(&username)
-        .load(&mut db)
-        .await
-        .unwrap();
-
-    let last_seen_id = most_recent_messages.as_slice().first().map(|msg| msg.id);
-
+pub async fn get_conversations(_username: Username) -> Root {
     Root {
-        content: Content::Messages(MessagesPage {
-            conversations: ConversationItems {
-                conversations: most_recent_messages
-                    .into_iter()
-                    .map(|message| ConversationPreview::new(message, username.as_str(), false))
-                    .collect(),
-                hidden_selected: None,
-                start_new: None,
-                last_seen_id,
-            },
-            selected: None,
-        }),
+        content: Content::Messages(MessagesPage { selected: None }),
     }
 }
 
@@ -164,34 +140,8 @@ pub async fn get_conversation(
     };
 
     if let None | Some(HtmxRequest { restore: true, .. }) = htmx {
-        let mut db = db.get().await.unwrap();
-        let most_recent_messages = DbMessage::most_recent(&username)
-            .load(&mut db)
-            .await
-            .unwrap();
-
-        let last_seen_id = most_recent_messages.as_slice().first().map(|msg| msg.id);
-
-        let hidden_selected = (!most_recent_messages
-            .iter()
-            .any(|msg| msg.is_between((&username, &peer))))
-        .then_some(peer.clone());
-
         Either::E1(Root {
             content: Content::Messages(MessagesPage {
-                conversations: ConversationItems {
-                    conversations: most_recent_messages
-                        .into_iter()
-                        .map(|message| {
-                            let selected = message.sender.as_str() == peer
-                                || message.receiver.as_str() == peer;
-                            ConversationPreview::new(message, username.as_str(), selected)
-                        })
-                        .collect(),
-                    start_new: None,
-                    hidden_selected,
-                    last_seen_id,
-                },
                 selected: Some(conversation),
             }),
         })
