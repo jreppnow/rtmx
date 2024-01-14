@@ -343,21 +343,30 @@ pub enum RequestType {
     Search,
 }
 
+#[derive(Debug, Clone, Deserialize, Serialize, PartialEq)]
+#[serde(rename_all = "kebab-case")]
+pub enum Ordering {
+    Alphabetically,
+    MostRecent,
+}
+
 #[derive(Debug, Clone, Deserialize)]
 #[serde(rename_all = "kebab-case")]
 pub struct GetConversationPreviewsQuery {
     last_seen_id: Option<u64>,
     selected_conversation: Option<String>,
     search_needle: String,
+    ordering: Ordering,
 }
 
 pub async fn get_conversation_previews(
     State(Application { db }): State<Application>,
-    Path(_request_type): Path<RequestType>,
+    Path(request_type): Path<RequestType>,
     Query(GetConversationPreviewsQuery {
         last_seen_id,
         selected_conversation,
         search_needle,
+        ordering,
     }): Query<GetConversationPreviewsQuery>,
     username: Username,
 ) -> Result<ConversationItems, StatusCode> {
@@ -368,6 +377,7 @@ pub async fn get_conversation_previews(
         .await
         .unwrap();
 
+    // TODO: Include in query!
     if !search_needle.is_empty() {
         most_recent_messages.retain(|msg| {
             (msg.sender == username.as_str() && msg.receiver.contains(&search_needle))
@@ -382,6 +392,23 @@ pub async fn get_conversation_previews(
             return Err(StatusCode::NO_CONTENT);
         }
         _ => {}
+    }
+
+    // TODO: Include in query!
+    if let Ordering::Alphabetically = ordering {
+        most_recent_messages.sort_by(|left, right| {
+            macro_rules! get_peer {
+                ($id:ident) => {
+                    if $id.sender == username.as_str() {
+                        &$id.receiver
+                    } else {
+                        &$id.sender
+                    }
+                };
+            }
+
+            get_peer!(left).cmp(get_peer!(right))
+        });
     }
 
     let last_seen_id = match (last_seen_id, newest_id) {

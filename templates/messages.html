@@ -2,6 +2,10 @@
     <aside id="conversations-list">
         <form hx-get="/conversations-list/poll" hx-target="#conversation-dynamic-bits" hx-swap="innerHTML" hx-trigger="every 20s,new-message-in-active-conversation from:body">
             <input type="text" name="search-needle" hx-include="closest form" hx-get="/conversations-list/search" hx-target="#conversation-dynamic-bits" hx-swap="innerHTML" hx-trigger="keyup delay:200ms,load"/>
+            <select name="ordering" hx-include="closest form" hx-get="/conversations-list/search" hx-target="#conversation-dynamic-bits" hx-swap="innerHTML" hx-trigger="input">
+                <option value="most-recent">most recent</option>
+                <option value="alphabetically">alphabetically</option>
+            </select>
             <div id="conversation-dynamic-bits"/>
         </form>
     </aside>
