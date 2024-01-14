@@ -425,9 +425,14 @@ pub async fn get_conversation_previews(
         });
     }
 
-    // TODO: logic to cancel requests with no updates on (polling only)
-
     let newest_id = most_recent_messages.as_slice().first().map(|msg| msg.id);
+    match (request_type, newest_id, last_seen_id) {
+        (RequestType::Poll, None, _) => return Err(StatusCode::NO_CONTENT),
+        (RequestType::Poll, Some(newest_id), Some(last_seen_id)) if last_seen_id >= newest_id => {
+            return Err(StatusCode::NO_CONTENT);
+        }
+        _ => {}
+    }
 
     let last_seen_id = match (last_seen_id, newest_id) {
         (Some(last_seen_id), Some(newest_id)) => Some(max(last_seen_id, newest_id)),
