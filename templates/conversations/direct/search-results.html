@@ -1,0 +1,20 @@
+{% match results -%}
+    {% when SearchResultsInner::Found with {peer, search_needle, result_id, earlier, message, later} -%}
+        <form hx-include="this">
+            <button id="previous-search-hit" hx-get="/conversations/direct/{{ peer }}/search" hx-target="#history-or-search">Previous</button>
+            <button id="next-search-hit" hx-get="/conversations/direct/{{ peer }}/search" hx-target="#history-or-search">Next</button> 
+            <input type="hidden" name="search-needle" value="{{ search_needle }}">
+            <input type="hidden" name="last-seen" value="{{ result_id }}">
+        </form>
+        <ul id="message-history">
+            {{ earlier|safe }}
+            {{ message|safe }}
+            {{ later|safe }}
+        </ul>
+    {% when SearchResultsInner::NotFound -%}
+        <p>No messages fitting the search criteria, maybe try a different keyword?</p>
+{% endmatch %} 
+
+
+
+

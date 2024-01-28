@@ -2,6 +2,7 @@ pub mod schema;
 
 use chrono::NaiveDateTime;
 use diesel::backend::Backend;
+use diesel::helper_types::Like;
 use diesel::query_source::{Alias, AliasedField};
 use diesel::{alias, prelude::*, Expression};
 
@@ -34,6 +35,11 @@ type Between<'a, DB> = Filter<
     All<DB>,
     IsBetween<'a, schema::messages::columns::sender, schema::messages::columns::receiver, &'a str>,
 >;
+
+type Containing<'a, DB> =
+    Limit<Filter<Between<'a, DB>, Like<schema::messages::columns::content, String>>>;
+type ContainingAfter<'a, DB> = Filter<Containing<'a, DB>, Gt<schema::messages::columns::id, u64>>;
+type ContainingBefore<'a, DB> = Filter<Containing<'a, DB>, Lt<schema::messages::columns::id, u64>>;
 
 type After<'a, DB> = Filter<Between<'a, DB>, Gt<schema::messages::id, u64>>;
 type Before<'a, DB> = Filter<Between<'a, DB>, Lt<schema::messages::id, u64>>;
@@ -88,6 +94,20 @@ impl Message {
     pub fn is_between(&self, (peer1, peer2): (&str, &str)) -> bool {
         (self.sender == peer1 && self.receiver == peer2)
             || (self.sender == peer2 && self.receiver == peer1)
+    }
+
+    pub fn like<'a, DB: Backend>(peers: (&'a str, &'a str), like: &'a str) -> Containing<'a, DB> {
+        Self::between(peers)
+            .filter(schema::messages::content.like(format!("%{like}%")))
+            .limit(1)
+    }
+
+    pub fn like_before<'a, DB: Backend>(
+        peers: (&'a str, &'a str),
+        like: &'a str,
+        id: u64,
+    ) -> ContainingBefore<'a, DB> {
+        Self::like(peers, like).filter(schema::messages::id.lt(id))
     }
 }
 

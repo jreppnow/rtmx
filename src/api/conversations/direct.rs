@@ -11,7 +11,7 @@ use axum::{
     Form, Router,
 };
 use axum_extra::either::Either;
-use diesel::Insertable;
+use diesel::{Insertable, OptionalExtension};
 use diesel_async::RunQueryDsl;
 use serde::Deserialize;
 
@@ -29,6 +29,7 @@ pub fn router() -> Router<Application> {
         .route("/:peer", get(get_conversation))
         .route("/:peer", post(send_message))
         .route("/:peer/poll", get(get_new_messages))
+        .route("/:peer/search", get(search))
         .route("/:peer/:direction", get(load_more))
 }
 
@@ -291,4 +292,103 @@ pub async fn load_more(
             .collect(),
         lazy_load,
     }
+}
+
+#[derive(Debug)]
+pub enum SearchResultsInner {
+    Found {
+        later: LoadMore,
+        message: Message,
+        earlier: LoadMore,
+        result_id: u64,
+        search_needle: String,
+        peer: String,
+    },
+    NotFound,
+}
+
+#[derive(Debug, Template)]
+#[template(path = "conversations/direct/search-results.html")]
+pub struct SearchResults {
+    results: SearchResultsInner,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+#[serde(rename_all = "kebab-case")]
+pub struct SearchQuery {
+    search_needle: String,
+    current_result: Option<u64>,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+#[serde(rename_all = "kebab-case")]
+pub struct SearchPath {
+    peer: String,
+}
+
+pub async fn search(
+    State(Application { db }): State<Application>,
+    Path(SearchPath { peer }): Path<SearchPath>,
+    Query(SearchQuery {
+        search_needle,
+        current_result,
+    }): Query<SearchQuery>,
+    username: Username,
+) -> Either<SearchResults, StatusCode> {
+    let mut db = db.get().await.unwrap();
+
+    let result = if let Some(current_result) = current_result {
+        // TODO: evaluate source to figure out direction
+        let next_message =
+            DbMessage::like_before((&peer, &username), &search_needle, current_result)
+                .first(&mut db)
+                .await
+                .optional()
+                .unwrap();
+
+        let Some(next_message) = next_message else {
+            return Either::E2(StatusCode::NO_CONTENT);
+        };
+
+        next_message
+    } else {
+        // todo: evaluate source
+        let next_message = DbMessage::like((&peer, &username), &search_needle)
+            .first(&mut db)
+            .await
+            .optional()
+            .unwrap();
+
+        let Some(next_message) = next_message else {
+            return Either::E1(SearchResults {
+                results: SearchResultsInner::NotFound,
+            });
+        };
+
+        next_message
+    };
+
+    let later = LoadMore {
+        peer: peer.clone(),
+        id: result.id,
+        direction: LoadDirection::Later,
+    };
+    let earlier = LoadMore {
+        peer: peer.clone(),
+        id: result.id,
+        direction: LoadDirection::Earlier,
+    };
+
+    let result_id = result.id;
+
+    return Either::E1(SearchResults {
+        results: SearchResultsInner::Found {
+            later,
+            message: (result.sender == username.as_str(), result).into(),
+            earlier,
+            result_id,
+            search_needle,
+            peer,
+        },
+    });
 }

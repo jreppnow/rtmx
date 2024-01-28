@@ -1,14 +1,20 @@
 <div id="conversation-details" hx-sync="this">
-    <ul id="message-history">
-        {{ messages|safe }}
-        {% match lazy_load -%}
-            {% when Some with (lazy_load) -%}
-                {{ lazy_load|safe }}
-            {% else -%}
-        {% endmatch %}
-    </ul>
-    <form id="new-message-form" hx-post="/conversations/direct/{{ messages.peer }}" hx-include="#hidden-refresh" hx-target="#hidden-refresh" hx-swap="outerHTML">
-        <input type="text" name="new-message-content" id="new-message-content" />
-        <button type="submit">Send</button>
-    </form>  
+    <form id="conversation-header">
+        <p id="conversation-peer-name">{{ messages.peer }}</p>
+        <input name="search-needle" value="" hx-trigger="keyup change delay:500ms" hx-target="#history-or-search" hx-get="/conversations/direct/{{ messages.peer }}/search" hx-include="#conversation-header">
+    </form>
+    <div id="history-or-search">
+        <ul id="message-history">
+            {{ messages|safe }}
+            {% match lazy_load -%}
+                {% when Some with (lazy_load) -%}
+                    {{ lazy_load|safe }}
+                {% else -%}
+            {% endmatch %}
+        </ul>
+        <form id="new-message-form" hx-post="/conversations/direct/{{ messages.peer }}" hx-include="#hidden-refresh" hx-target="#hidden-refresh" hx-swap="outerHTML">
+            <input type="text" name="new-message-content" id="new-message-content" />
+            <button type="submit">Send</button>
+        </form>  
+    </div>
 </div>
