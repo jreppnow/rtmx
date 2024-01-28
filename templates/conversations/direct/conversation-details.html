@@ -6,9 +6,8 @@
                 {{ lazy_load|safe }}
             {% else -%}
         {% endmatch %}
-
     </ul>
-    <form id="new-message-form" hx-post="/conversations/{{ messages.peer }}" hx-include="#hidden-refresh" hx-target="#hidden-refresh" hx-swap="outerHTML">
+    <form id="new-message-form" hx-post="/conversations/direct/{{ messages.peer }}" hx-include="#hidden-refresh" hx-target="#hidden-refresh" hx-swap="outerHTML">
         <input type="text" name="new-message-content" id="new-message-content" />
         <button type="submit">Send</button>
     </form>  

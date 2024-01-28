@@ -27,7 +27,7 @@ pub fn router() -> Router<Application> {
 }
 
 #[derive(Template)]
-#[template(path = "login.html")]
+#[template(path = "login/index.html")]
 pub struct LoginPage {
     value: String,
     has_error: bool,
