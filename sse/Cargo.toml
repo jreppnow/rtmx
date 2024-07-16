@@ -1,0 +1,18 @@
+[package]
+name = "sse"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+axum = "0.7.5"
+futures = "0.3.30"
+lipsum = "0.9.1"
+maud = { version = "0.26.0", features = ["axum"] }
+rand = "0.8.5"
+stylers = "1.0.0-alpha"
+tokio = { version = "1.38.0", features = ["net", "rt-multi-thread", "sync", "time"] }
+tokio-stream = "0.1.15"
+tower-http = { version = "0.5.2", features = ["fs"] }
+
+[build-dependencies]
+stylers = "1.0.0-alpha"
