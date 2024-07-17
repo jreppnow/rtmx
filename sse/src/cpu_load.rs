@@ -88,20 +88,9 @@ fn loading_bar(color: Color) -> Markup {
 fn render_bars(percentage: usize) -> Markup {
     let bars = (percentage / 10) + 1;
 
-    let loading_box = style!(div {
-        display: flex;
-        flex-direction: row;
-        justify-content: start;
-        align-items: center;
-        gap: 4px;
-        width: fit-content;
-    });
-
     html!(
-       div.{(loading_box)} sse-swap="bars" hx-swap="innerHTML" {
-           @for value in 1..=10 {
-               { (loading_bar(Color::from((value <= bars).then_some(value)))) }
-           }
+       @for value in 1..=10 {
+           { (loading_bar(Color::from((value <= bars).then_some(value)))) }
        }
     )
 }
@@ -117,6 +106,7 @@ async fn page() -> Markup {
         gap: 4px;
         padding: 4px;
         width: fit-content;
+        margin-bottom: 4px;
     });
 
     let percentage_s = style! {
@@ -136,18 +126,31 @@ async fn page() -> Markup {
         }
     };
 
+    let loading_box = style!(div {
+        display: flex;
+        flex-direction: row;
+        justify-content: start;
+        align-items: center;
+        gap: 4px;
+        width: fit-content;
+    });
+
     html!(html {
         head {
             script src="https://unpkg.com/htmx.org@1.9.12" integrity="sha384-ujb1lZYygJmzgSwoxRggbCHcjc0rB2XoQrxeTUQyRjrOnlCoYta87iKBWq3EsdM2" crossorigin="anonymous" {}
             script src="https://unpkg.com/htmx.org@1.9.12/dist/ext/sse.js" {}
             link rel="stylesheet" href="/assets/main.css" {}
         }
-        body {
-            div.{(box_s)} hx-ext="sse" sse-connect="/cpu_load/events" {
-                {(render_bars(100))}
-                div.{(separator_s)} {}
-                p.{(percentage_s)} sse-swap="percentage" hx-swap="innerHTML" {
-                    {("100%")}
+        body hx-ext="sse" sse-connect="/cpu_load/events"{
+            @for i in 0..8 {
+                div.{(box_s)}  {
+                    div.{(loading_box)} sse-swap={(format!("bars_{i}"))} hx-swap="innerHTML" {
+                        {(render_bars(100))}
+                    }
+                    div.{(separator_s)} {}
+                    p.{(percentage_s)} sse-swap={(format!("percentage_{i}"))} hx-swap="innerHTML" {
+                        {("100%")}
+                    }
                 }
             }
         }
@@ -155,50 +158,56 @@ async fn page() -> Markup {
 }
 
 async fn events() -> Sse<impl Stream<Item = Result<Event, Infallible>>> {
-    struct State {
-        next: Instant,
-        last_value: usize,
-        send_percentage: bool,
+    let mut streams = Vec::with_capacity(8);
+
+    for i in 0..8 {
+        struct State {
+            next: Instant,
+            last_value: usize,
+            send_percentage: bool,
+        }
+
+        let stream = Box::pin(futures::stream::unfold(
+            State {
+                next: Instant::now(),
+                last_value: 100,
+                send_percentage: false,
+            },
+            move |state| async move {
+                if state.send_percentage {
+                    return Some((
+                        Ok(Event::default()
+                            .event(format!("percentage_{i}"))
+                            .data(format!("{}%", state.last_value))),
+                        State {
+                            send_percentage: false,
+                            ..state
+                        },
+                    ));
+                }
+
+                let now = Instant::now();
+                if state.next > now {
+                    sleep(state.next - now).await;
+                }
+
+                let percentage = rand::random::<usize>() % 100;
+
+                let mut bars = String::new();
+                render_bars(percentage).render_to(&mut bars);
+                Some((
+                    Ok(Event::default().event(format!("bars_{i}")).data(bars)),
+                    State {
+                        send_percentage: true,
+                        last_value: percentage,
+                        next: state.next + Duration::from_millis(500 + (i * 50)),
+                    },
+                ))
+            },
+        ));
+
+        streams.push(stream);
     }
 
-    let stream = futures::stream::unfold(
-        State {
-            next: Instant::now(),
-            last_value: 100,
-            send_percentage: false,
-        },
-        |state| async move {
-            if state.send_percentage {
-                return Some((
-                    Ok(Event::default()
-                        .event("percentage")
-                        .data(format!("{}%", state.last_value))),
-                    State {
-                        send_percentage: false,
-                        ..state
-                    },
-                ));
-            }
-
-            let now = Instant::now();
-            if state.next > now {
-                sleep(state.next - now).await;
-            }
-
-            let percentage = rand::random::<usize>() % 100;
-
-            let mut bars = String::new();
-            render_bars(percentage).render_to(&mut bars);
-            Some((
-                Ok(Event::default().event("bars").data(bars)),
-                State {
-                    send_percentage: true,
-                    last_value: percentage,
-                    next: state.next + Duration::from_millis(500),
-                },
-            ))
-        },
-    );
-
-    Sse::new(stream).keep_alive(KeepAlive::default())
+    Sse::new(futures::stream::select_all(streams)).keep_alive(KeepAlive::default())
 }
